@@ -312,7 +312,7 @@ dict_init(cmd_ln_t *config, bin_mdef_t * mdef, logmath_t *logmath)
             return NULL;
         }
         d->ngram_g2p_model = ngram_g2p_model;
-        ckd_free((void*)arpafile);
+        ckd_free(arpafile);
     }
 
     d->refcnt = 1;
@@ -521,17 +521,16 @@ dict_report(dict_t * d)
     E_INFO_NOFN("\n");
 }
 
-
 int
-dict_starts_with(const char *pre, const char *str) {
+dict_starts_with(const char *pre, const char *str)
+{
     size_t lenpre = strlen(pre), lenstr = strlen(str);
     return lenstr < lenpre ? 0 : strncmp(pre, str, lenpre) == 0;
 }
 
-
 unigram_t
-dict_split_unigram (const char * word){
-
+dict_split_unigram (const char * word)
+{
     size_t total_letters = 0;
     size_t total_phone = 0;
     int token_pos = 0;
@@ -545,7 +544,7 @@ dict_split_unigram (const char * word){
     lenword = strlen(word);
     for (w = 0; w < lenword; w++) {
         unigram_letter = word[w];
-        if (unigram_letter == '}'){
+        if (unigram_letter == '}') {
             token_pos = w;
             continue;
         }
@@ -570,7 +569,6 @@ dict_split_unigram (const char * word){
     for (w = 0; w < total_phone; w++) {
         if (word[w + 1 + total_letters] == '|') {
             phone[w] = ' ';
-            continue;
         } else {
             phone[w] = word[w + 1 + total_letters];
         }
@@ -583,13 +581,13 @@ dict_split_unigram (const char * word){
 
 struct winner_t
 dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t history_list, const int32 total_unigrams,
-                    int history_total, int word_offset) {
-
+                    int history_total, int word_offset)
+{
     int32 current_prob = -2147483647;
     struct winner_t winner;
     int32 i = 0;
     int nused;
-    int32 *history = ckd_calloc((size_t)history_total * 2 , sizeof(int32*)); //ckd_calloc(history_total, sizeof(int32));
+    int32 *history = ckd_calloc((size_t)history_total, sizeof(int32*)); 
 
     gnode_t *gn;
     const char *vocab;
@@ -598,20 +596,13 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
     unigram_t unigram;
     
     for (gn = history_list; gn; gn = gnode_next(gn)) {
-        history[history_total-i] =  (int32)gnode_int32(gn);
+        history[history_total-i] = gnode_int32(gn);
         i++;
     }
 
     for (i = 0; i < total_unigrams; i++) {
         vocab = ngram_word(model, i);
         unigram  = dict_split_unigram(vocab);
-        if (strcmp(unigram.phone, "_") == 0){
-            if (unigram.word)
-                ckd_free(unigram.word);
-            if (unigram.phone)
-                ckd_free(unigram.phone);
-            continue;
-        }
         sub = word_grapheme + word_offset;
         if (dict_starts_with(unigram.word, sub)){
             prob = ngram_ng_prob(model, i, history, history_total, &nused);
@@ -635,8 +626,8 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
 }
 
 char *
-dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model) {
-
+dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
+{
     char *final_phone = NULL;
     int totalh = 0;
     size_t increment = 1;
@@ -649,46 +640,55 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model) {
     const uint32 *total_unigrams;
     struct winner_t winner;
     const char *word;
+    unigram_t unigram;
 
     total_unigrams = ngram_model_get_counts(ngram_g2p_model);
     int32 wid_sentence = ngram_wid(ngram_g2p_model,"<s>"); // start with sentence
     history_list = glist_add_int32(history_list, wid_sentence);
     grapheme_len = strlen(word_grapheme);
-    for (j = 0 ; j <= grapheme_len-1 ; j += increment) {
-        winner = dict_get_winner_wid(ngram_g2p_model,word_grapheme,history_list,*total_unigrams,totalh,word_offset);
+    for (j = 0 ; j < grapheme_len ; j += increment) {
+        winner = dict_get_winner_wid(ngram_g2p_model, word_grapheme, history_list, *total_unigrams, totalh, word_offset);
         increment = winner.length_match;
         if (increment == 0) {
             E_ERROR("Error trying to find matching phoneme (%s) Exiting.. \n" , word_grapheme);
             return NULL;
         }
         history_list = glist_add_int32(history_list, winner.winner_wid);
-        totalh = j+1;
+        totalh = j + 1;
         word_offset += winner.length_match;
         final_phoneme_len += winner.len_phoneme;
     }
 
     history_list = glist_reverse(history_list);
-    final_phone = ckd_calloc(1, final_phoneme_len*2);
-    unigram_t unigram;
+    final_phone = ckd_calloc(1, final_phoneme_len * 2);
     for (gn = history_list; gn; gn = gnode_next(gn)) {
         if (!first) {
             first = 1;
             continue;
         }
-        word = ngram_word(ngram_g2p_model, (int32) gnode_int32(gn));
+        word = ngram_word(ngram_g2p_model, gnode_int32(gn));
 
         if (!word)
             continue;
 
         unigram  = dict_split_unigram(word);
+
+        if (strcmp(unigram.phone, "_") == 0) {
+            if (unigram.word)
+                ckd_free(unigram.word);
+            if (unigram.phone)
+                ckd_free(unigram.phone);
+            continue;
+        }
         strcat(final_phone, unigram.phone);
         strcat(final_phone, " ");
+
+        if (unigram.word)
+            ckd_free(unigram.word);
+        if (unigram.phone)
+            ckd_free(unigram.phone);
     }
 
-    if (unigram.word)
-        ckd_free(unigram.word);
-    if (unigram.phone)
-        ckd_free(unigram.phone);
     if (history_list)
         glist_free(history_list);
 
@@ -697,8 +697,8 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model) {
 }
 
 int
-dict_add_g2p_word(dict_t * dict, char const *word) {
-
+dict_add_g2p_word(dict_t * dict, char const *word)
+{
     int32 wid = 0;
     s3cipid_t *pron;
     char **phonestr, *tmp;
