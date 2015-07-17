@@ -568,8 +568,7 @@ dict_split_unigram (const char * word){
 
     phone = ckd_calloc(1, total_phone+1);
     for (w = 0; w < total_phone; w++) {
-        if (word[w+1+total_letters] == '|')
-        {
+        if (word[w + 1 + total_letters] == '|') {
             phone[w] = ' ';
             continue;
         } else {
@@ -591,6 +590,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
     int32 i = 0;
     int nused;
     int32 *history = ckd_calloc((size_t)history_total * 2 , sizeof(int32*)); //ckd_calloc(history_total, sizeof(int32));
+
     gnode_t *gn;
     const char *vocab;
     const char *sub;
