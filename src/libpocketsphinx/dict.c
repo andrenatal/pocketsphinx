@@ -590,7 +590,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
     struct winner_t winner;
     int32 i = 0;
     int nused;
-    int32 history[history_total];
+    int32 *history = ckd_calloc((size_t)history_total * 2 , sizeof(int32*)); //ckd_calloc(history_total, sizeof(int32));
     gnode_t *gn;
     const char *vocab;
     const char *sub;
@@ -627,6 +627,9 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
         if (unigram.phone)
             ckd_free(unigram.phone);
     }
+
+    if (history)
+        ckd_free(history);
 
     return winner;
 }
