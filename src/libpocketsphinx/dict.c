@@ -44,6 +44,7 @@
 
 /* Local headers. */
 #include "dict.h"
+#include "../../../sphinxbase/src/libsphinxbase/lm/ngram_model_internal.h"
 
 
 #define DELIM	" \t\n"         /* Set of field separator characters */
@@ -581,23 +582,25 @@ dict_split_unigram (const char * word)
 
 struct winner_t
 dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t history_list, const int32 total_unigrams,
-                    int history_total, int word_offset)
+                    int word_offset)
 {
     int32 current_prob = -2147483647;
     struct winner_t winner;
-    int32 i = 0;
+    int32 i = 0, j = 0;
     int nused;
-    int32 *history = ckd_calloc((size_t)history_total, sizeof(int32*)); 
-
+    int32 ngram_order = model->n;
+    int32 *history = ckd_calloc((size_t)ngram_order+1, sizeof(int32));
     gnode_t *gn;
     const char *vocab;
     const char *sub;
     int32 prob;
     unigram_t unigram;
-    
+
     for (gn = history_list; gn; gn = gnode_next(gn)) {
-        history[history_total-i] = gnode_int32(gn);
-        i++;
+        history[ngram_order-j] = gnode_int32(gn);
+        j++;
+        if (j >= ngram_order)
+            break;
     }
 
     for (i = 0; i < total_unigrams; i++) {
@@ -605,7 +608,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
         unigram  = dict_split_unigram(vocab);
         sub = word_grapheme + word_offset;
         if (dict_starts_with(unigram.word, sub)){
-            prob = ngram_ng_prob(model, i, history, history_total, &nused);
+            prob = ngram_ng_prob(model, i, history, j, &nused);
             if (current_prob < prob) {
                 current_prob = prob;
                 winner.winner_wid = i;
@@ -613,6 +616,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
                 winner.len_phoneme = strlen(unigram.phone);
             }
         }
+
         if (unigram.word)
             ckd_free(unigram.word);
         if (unigram.phone)
@@ -647,7 +651,7 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
     history_list = glist_add_int32(history_list, wid_sentence);
     grapheme_len = strlen(word_grapheme);
     for (j = 0 ; j < grapheme_len ; j += increment) {
-        winner = dict_get_winner_wid(ngram_g2p_model, word_grapheme, history_list, *total_unigrams, totalh, word_offset);
+        winner = dict_get_winner_wid(ngram_g2p_model, word_grapheme, history_list, *total_unigrams, word_offset);
         increment = winner.length_match;
         if (increment == 0) {
             E_ERROR("Error trying to find matching phoneme (%s) Exiting.. \n" , word_grapheme);
@@ -691,7 +695,6 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
 
     if (history_list)
         glist_free(history_list);
-
 
     return final_phone;
 }
