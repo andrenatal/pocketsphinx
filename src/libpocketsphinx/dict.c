@@ -8,27 +8,27 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
  *    the documentation and/or other materials provided with the
  *    distribution.
  *
- * This work was supported in part by funding from the Defense Advanced 
- * Research Projects Agency and the National Science Foundation of the 
+ * This work was supported in part by funding from the Defense Advanced
+ * Research Projects Agency and the National Science Foundation of the
  * United States of America, and the CMU Sphinx Speech Consortium.
  *
- * THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND 
- * ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+ * THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND
+ * ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
  * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
  * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY
  * NOR ITS EMPLOYEES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * ====================================================================
@@ -52,7 +52,7 @@
 
 #if WIN32
 #define snprintf sprintf_s
-#endif 
+#endif
 
 extern const char *const cmu6_lts_phone_table[];
 
@@ -522,6 +522,7 @@ dict_report(dict_t * d)
     E_INFO_NOFN("\n");
 }
 
+// This function returns if a string (str) starts with the passed prefix (*pre)
 int
 dict_starts_with(const char *pre, const char *str)
 {
@@ -529,15 +530,25 @@ dict_starts_with(const char *pre, const char *str)
     return lenstr < lenpre ? 0 : strncmp(pre, str, lenpre) == 0;
 }
 
-unigram_t
-dict_split_unigram (const char * word)
+// Helper function to clear unigram
+void
+free_unigram_t(unigram_t *unigram)
 {
-    size_t total_letters = 0;
+    ckd_free(unigram->word);
+    ckd_free(unigram->phone);
+}
+
+// This function splits an unigram received (in format e|w}UW) and return a structure
+// containing two fields: the grapheme (before }) in unigram.word and the phoneme (after }) unigram.phone
+unigram_t
+dict_split_unigram(const char * word)
+{
+    size_t total_graphemes = 0;
     size_t total_phone = 0;
     int token_pos = 0;
     int w ;
     char *phone;
-    char *letter;
+    char *grapheme;
     size_t lenword = 0;
     char unigram_letter;
     int add;
@@ -550,39 +561,41 @@ dict_split_unigram (const char * word)
             continue;
         }
         if (!token_pos)
-            total_letters++;
+            total_graphemes++;
         else
             total_phone++;
     }
 
-    letter = ckd_calloc(1,total_letters+1);
+    grapheme = ckd_calloc(1,total_graphemes+1);
     add = 0;
-    for (w = 0; w < total_letters; w++) {
+    for (w = 0; w < total_graphemes; w++) {
         if (word[w] == '|')
         {
             add++;
             continue;
         }
-        letter[w-add] = word[w];
+        grapheme[w-add] = word[w];
     }
 
     phone = ckd_calloc(1, total_phone+1);
     for (w = 0; w < total_phone; w++) {
-        if (word[w + 1 + total_letters] == '|') {
+        if (word[w + 1 + total_graphemes] == '|') {
             phone[w] = ' ';
         } else {
-            phone[w] = word[w + 1 + total_letters];
+            phone[w] = word[w + 1 + total_graphemes];
         }
     }
 
-    unigram_t unigram = { letter , phone};
+    unigram_t unigram = { grapheme, phone};
 
     return unigram;
 };
 
+// This function calculates the most likely unigram to appear in the current position at the word
+// based on the three latest chosen/winners unigrams (history) and return a structure containing
+// the word id (wid), and lengths of the phoneme and the word
 struct winner_t
-dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t history_list, const int32 total_unigrams,
-                    int word_offset)
+dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t history_list, int word_offset)
 {
     int32 current_prob = -2147483647;
     struct winner_t winner;
@@ -595,6 +608,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
     const char *sub;
     int32 prob;
     unigram_t unigram;
+    const uint32 *total_unigrams = model->n_counts;
 
     for (gn = history_list; gn; gn = gnode_next(gn)) {
         history[ngram_order-j] = gnode_int32(gn);
@@ -603,7 +617,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
             break;
     }
 
-    for (i = 0; i < total_unigrams; i++) {
+    for (i = 0; i < *total_unigrams; i++) {
         vocab = ngram_word(model, i);
         unigram  = dict_split_unigram(vocab);
         sub = word_grapheme + word_offset;
@@ -617,10 +631,7 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
             }
         }
 
-        if (unigram.word)
-            ckd_free(unigram.word);
-        if (unigram.phone)
-            ckd_free(unigram.phone);
+        free_unigram_t(&unigram);
     }
 
     if (history)
@@ -629,6 +640,9 @@ dict_get_winner_wid(ngram_model_t *model, const char * word_grapheme, glist_t hi
     return winner;
 }
 
+// This functions manages the winner unigrams and build the history of winners to properly generate the final phoneme. In the first part,
+// I gets the most likely unigrams which graphemes compose the word and build a history of wids that is used in this search. In second part, the we
+// use the history of wids to get each correspondent unigram, and on third part, we build the final phoneme word from this history.
 char *
 dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
 {
@@ -641,20 +655,19 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
     glist_t history_list = NULL;
     gnode_t *gn;
     int first = 0;
-    const uint32 *total_unigrams;
     struct winner_t winner;
     const char *word;
     unigram_t unigram;
 
-    total_unigrams = ngram_model_get_counts(ngram_g2p_model);
     int32 wid_sentence = ngram_wid(ngram_g2p_model,"<s>"); // start with sentence
     history_list = glist_add_int32(history_list, wid_sentence);
     grapheme_len = strlen(word_grapheme);
     for (j = 0 ; j < grapheme_len ; j += increment) {
-        winner = dict_get_winner_wid(ngram_g2p_model, word_grapheme, history_list, *total_unigrams, word_offset);
+        winner = dict_get_winner_wid(ngram_g2p_model, word_grapheme, history_list, word_offset);
         increment = winner.length_match;
         if (increment == 0) {
             E_ERROR("Error trying to find matching phoneme (%s) Exiting.. \n" , word_grapheme);
+            ckd_free(history_list);
             return NULL;
         }
         history_list = glist_add_int32(history_list, winner.winner_wid);
@@ -664,7 +677,7 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
     }
 
     history_list = glist_reverse(history_list);
-    final_phone = ckd_calloc(1, final_phoneme_len * 2);
+    final_phone = ckd_calloc(1, (final_phoneme_len * 2)+1);
     for (gn = history_list; gn; gn = gnode_next(gn)) {
         if (!first) {
             first = 1;
@@ -678,19 +691,13 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
         unigram  = dict_split_unigram(word);
 
         if (strcmp(unigram.phone, "_") == 0) {
-            if (unigram.word)
-                ckd_free(unigram.word);
-            if (unigram.phone)
-                ckd_free(unigram.phone);
+            free_unigram_t(&unigram);
             continue;
         }
         strcat(final_phone, unigram.phone);
         strcat(final_phone, " ");
 
-        if (unigram.word)
-            ckd_free(unigram.word);
-        if (unigram.phone)
-            ckd_free(unigram.phone);
+        free_unigram_t(&unigram);
     }
 
     if (history_list)
@@ -699,8 +706,10 @@ dict_g2p(char const *word_grapheme, ngram_model_t *ngram_g2p_model)
     return final_phone;
 }
 
+// This functions just receives the dict lacking word from fsg_search, call the main function dict_g2p, and then add the word to the memory dict.
+// The second part of this function is the same as pocketsphinx.c: https://github.com/cmusphinx/pocketsphinx/blob/ba6bd21b3601339646d2db6d2297d02a8a6b7029/src/libpocketsphinx/pocketsphinx.c#L816
 int
-dict_add_g2p_word(dict_t * dict, char const *word)
+dict_add_g2p_word(dict_t *dict, char const *word)
 {
     int32 wid = 0;
     s3cipid_t *pron;
